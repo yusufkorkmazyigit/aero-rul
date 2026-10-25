@@ -1,0 +1,44 @@
+site_name: aero-rul
+site_description: Remaining useful life prediction for turbofan engines with calibrated uncertainty
+site_url: https://yusufkorkmazyigit.github.io/aero-rul/
+repo_url: https://github.com/yusufkorkmazyigit/aero-rul
+repo_name: yusufkorkmazyigit/aero-rul
+copyright: MIT License. N-CMAPSS data by NASA, CC0.
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - Method: method.md
+  - Results: results.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js

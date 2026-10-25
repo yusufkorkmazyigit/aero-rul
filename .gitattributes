@@ -1,0 +1,5 @@
+# Store text with LF line endings everywhere, so Windows and Linux checkouts agree.
+* text=auto eol=lf
+*.png binary
+*.h5 binary
+*.parquet binary

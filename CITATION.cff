@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "aero-rul: remaining useful life prediction for turbofan engines with calibrated uncertainty"
+authors:
+  - family-names: "Korkmazyiğit"
+    given-names: "Yusuf"
+repository-code: "https://github.com/yusufkorkmazyigit/aero-rul"
+license: MIT
+version: 0.1.0
+keywords:
+  - predictive maintenance
+  - remaining useful life
+  - N-CMAPSS
+  - conformal prediction
+  - aviation
+references:
+  - type: article
+    title: "Aircraft Engine Run-to-Failure Dataset under Real Flight Conditions for Prognostics and Diagnostics"
+    authors:
+      - family-names: "Arias Chao"
+        given-names: "Manuel"
+      - family-names: "Kulkarni"
+        given-names: "Chetan"
+      - family-names: "Goebel"
+        given-names: "Kai"
+      - family-names: "Fink"
+        given-names: "Olga"
+    journal: "Data"
+    volume: 6
+    issue: 1
+    start: 5
+    year: 2021
+    doi: "10.3390/data6010005"

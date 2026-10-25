@@ -38,6 +38,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+docs = ["mkdocs-material>=9.5"]
 
 [project.scripts]
 aerorul = "aerorul.cli:app"
@@ -45,6 +46,7 @@ aerorul = "aerorul.cli:app"
 [project.urls]
 Homepage = "https://github.com/yusufkorkmazyigit/aero-rul"
 Issues = "https://github.com/yusufkorkmazyigit/aero-rul/issues"
+Documentation = "https://yusufkorkmazyigit.github.io/aero-rul/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aerorul"]

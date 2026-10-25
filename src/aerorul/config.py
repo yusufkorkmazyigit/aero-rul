@@ -33,6 +33,11 @@ class FeatureConfig(_Strict):
     stats: list[Stat] = Field(default_factory=lambda: ["mean", "std", "min", "max"])
     # Optional upper clip on the RUL label (piecewise-linear target). None = raw RUL.
     rul_cap: float | None = None
+    # History features: trailing mean and slope over the last `history_window` flights of
+    # the same engine, for every `<signal>_<stat>` column with a stat in `history_on`.
+    # 0 or 1 turns them off.
+    history_window: int = Field(10, ge=0)
+    history_on: list[Stat] = Field(default_factory=lambda: ["mean", "max"])
 
 
 ModelName = Literal["ridge", "lgbm"]
@@ -50,12 +55,12 @@ class EvalConfig(_Strict):
     results_dir: Path = Path("results")
 
 
-Method = Literal["split", "cv", "quantile"]
+Method = Literal["split", "cv", "quantile", "cqr"]
 
 
 class UncertaintyConfig(_Strict):
     model: ModelName = "lgbm"
-    methods: list[Method] = Field(default_factory=lambda: ["split", "cv", "quantile"])
+    methods: list[Method] = Field(default_factory=lambda: ["split", "cv", "quantile", "cqr"])
     # Miscoverage levels: 0.1 -> a 90 % interval.
     alphas: list[float] = Field(default_factory=lambda: [0.2, 0.1])
     # Dev engines set aside for calibration by the split method.

@@ -54,10 +54,12 @@ def prepare_cmd(config: Path = ConfigOpt) -> None:
 
 
 def _load_table(cfg) -> pd.DataFrame:
-    path = Path(cfg.data.processed_dir) / "cycles.parquet"
-    if not path.exists():
-        raise typer.BadParameter(f"{path} not found; run `aerorul prepare` first")
-    return pd.read_parquet(path)
+    from .features import load_cycles
+
+    try:
+        return load_cycles(cfg)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @app.command()

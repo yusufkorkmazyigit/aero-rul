@@ -5,7 +5,7 @@ A maintenance planner cannot act on "about 40 flights left". They can act on "be
 second half of that sentence is the point of this module: we **measure** coverage on
 engines the model never saw, instead of trusting the method's promise.
 
-Three methods:
+Four methods:
 
 ``split`` (split conformal prediction)
     Set some dev engines aside for calibration and train on the rest. The absolute
@@ -24,6 +24,13 @@ Three methods:
     Fit two models for the alpha/2 and 1 - alpha/2 quantiles. Widths adapt to each
     input, but there is no coverage guarantee at all; a useful contrast.
 
+``cqr`` (conformalized quantile regression, Romano et al., 2019)
+    The quantile models' interval, widened or narrowed by a conformal correction. The
+    score of a cycle is how far its true RUL lies outside [lo, hi] (negative if inside);
+    the conformal quantile q of those scores gives [lo - q, hi + q]. Widths still adapt
+    to each input, and coverage regains the conformal guarantee. Scores come from
+    leave-one-engine-out predictions, as in ``cv``.
+
 Exchangeability is the assumption to watch. N-CMAPSS test engines 14 and 15 fly a
 different mix of flights than the training engines; if coverage drops there, that is a
 finding about distribution shift, not a bug.
@@ -38,6 +45,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+from sklearn.model_selection import LeaveOneGroupOut
 from tqdm.auto import tqdm
 
 from .evaluation import cross_validate, split_xy
@@ -99,6 +107,18 @@ def cv_conformal(
     return _interval_frame(test, pred, pred - q, pred + q)
 
 
+def _quantile_predict(X, y, X_new, alpha: float, params: dict | None, seed: int):
+    """Fit LightGBM at alpha/2, 0.5 and 1 - alpha/2; return (lo, mid, hi) on X_new."""
+    kw = {**DEFAULTS["lgbm"], **(params or {}), "random_state": seed, "verbose": -1}
+    edges = [
+        LGBMRegressor(objective="quantile", alpha=q, **kw).fit(X, y).predict(X_new)
+        for q in (alpha / 2, 0.5, 1 - alpha / 2)
+    ]
+    # Separately fitted quantiles can cross; sort them so lo <= mid <= hi.
+    lo, mid, hi = np.sort(np.vstack(edges), axis=0)
+    return lo, mid, hi
+
+
 def quantile_intervals(
     dev: pd.DataFrame,
     test: pd.DataFrame,
@@ -107,15 +127,30 @@ def quantile_intervals(
     seed: int = 0,
 ) -> pd.DataFrame:
     X, y, _ = split_xy(dev)
-    X_test = test[feature_columns(test)]
-    kw = {**DEFAULTS["lgbm"], **(params or {}), "random_state": seed, "verbose": -1}
-    edges = []
-    for q in (alpha / 2, 0.5, 1 - alpha / 2):
-        model = LGBMRegressor(objective="quantile", alpha=q, **kw).fit(X, y)
-        edges.append(model.predict(X_test))
-    lo, mid, hi = edges
-    # Separately fitted quantiles can cross; sort them so lo <= mid <= hi.
-    lo, mid, hi = np.sort(np.vstack([lo, mid, hi]), axis=0)
+    lo, mid, hi = _quantile_predict(X, y, test[feature_columns(test)], alpha, params, seed)
+    return _interval_frame(test, mid, lo, hi)
+
+
+def cqr_intervals(
+    dev: pd.DataFrame,
+    test: pd.DataFrame,
+    alpha: float,
+    params: dict | None = None,
+    seed: int = 0,
+) -> pd.DataFrame:
+    X, y, units = split_xy(dev)
+    scores = np.empty(len(y))
+    for train_idx, val_idx in LeaveOneGroupOut().split(X, y, units):
+        lo, _, hi = _quantile_predict(
+            X.iloc[train_idx], y[train_idx], X.iloc[val_idx], alpha, params, seed
+        )
+        scores[val_idx] = np.maximum(lo - y[val_idx], y[val_idx] - hi)
+    q = conformal_quantile(scores, alpha)
+    lo, mid, hi = _quantile_predict(X, y, test[feature_columns(test)], alpha, params, seed)
+    lo, hi = lo - q, hi + q
+    # A negative q narrows the interval; never let it turn inside out.
+    centre = (lo + hi) / 2
+    lo, hi = np.minimum(lo, centre), np.maximum(hi, centre)
     return _interval_frame(test, mid, lo, hi)
 
 
@@ -145,6 +180,8 @@ def run_uncertainty(
             iv = cv_conformal(dev, test, name, alpha, params, seed)
         elif method == "quantile":
             iv = quantile_intervals(dev, test, alpha, params, seed)
+        elif method == "cqr":
+            iv = cqr_intervals(dev, test, alpha, params, seed)
         else:
             raise ValueError(f"unknown method {method!r}")
         iv = iv.assign(method=method, alpha=alpha, target=1 - alpha, seed=seed)

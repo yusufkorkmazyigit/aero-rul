@@ -71,3 +71,15 @@ def test_split_needs_a_training_engine():
 def test_coverage_per_unit_has_every_test_engine():
     _, iv = run_uncertainty(_table(), "ridge", ["cv"], alphas=[0.2], seeds=[0])
     assert list(coverage_per_unit(iv).columns) == [7, 8, 9]
+
+
+def test_cqr_reaches_target_and_stays_ordered():
+    from aerorul.uncertainty import cqr_intervals
+
+    t = _table()
+    dev, test = t[t["split"] == "dev"], t[t["split"] == "test"]
+    iv = cqr_intervals(dev, test, alpha=0.1, params={"n_estimators": 60})
+    assert (iv["lo"] <= iv["hi"]).all()
+    assert interval_metrics(iv["RUL"], iv["lo"], iv["hi"])["coverage"] == pytest.approx(
+        0.9, abs=0.08
+    )

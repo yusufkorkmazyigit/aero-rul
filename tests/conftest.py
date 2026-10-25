@@ -57,7 +57,7 @@ def config_file(tmp_path, fake_h5) -> str:
         f"features:\n  groups: [W, X_s]\n  stats: [mean, std]\n"
         f"models:\n  names: [ridge, lgbm]\n  params: {{lgbm: {{n_estimators: 20}}}}\n"
         f"evaluation:\n  seeds: [0]\n  results_dir: {tmp_path / 'results'}\n"
-        f"uncertainty:\n  calibration_engines: 1\n"
+        f"uncertainty:\n  calibration_engines: 1\n  methods: [split, cv, quantile, cqr]\n"
         f"tuning:\n  optimizers: [abc, random, tpe]\n  budget: 3\n  abc_pop_size: 2\n",
         encoding="utf-8",
     )

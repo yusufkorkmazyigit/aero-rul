@@ -78,3 +78,8 @@ def test_shap_finds_the_informative_signal():
     per_feature, per_signal = shap_importance(_table(), {"n_estimators": 50})
     assert per_signal.index[0] == "T48"
     assert per_feature.index[0] == "T48_mean"
+
+
+def test_signal_of_handles_history_features():
+    assert signal_of("T50_max_roll10") == "T50"
+    assert signal_of("Nc_mean_slope5") == "Nc"

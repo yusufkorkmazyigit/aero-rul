@@ -12,6 +12,8 @@ share credit, and SHAP explains the model, not the engine.
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -23,6 +25,8 @@ STAT_SUFFIXES = ("_mean", "_std", "_min", "_max", "_median", "_first", "_last")
 
 
 def signal_of(feature: str) -> str:
+    # history features: T50_max_roll10, T50_max_slope10 -> T50_max -> T50
+    feature = re.sub(r"_(roll|slope)\d+$", "", feature)
     for suffix in STAT_SUFFIXES:
         if feature.endswith(suffix):
             return feature[: -len(suffix)]

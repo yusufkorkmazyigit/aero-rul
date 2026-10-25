@@ -45,6 +45,8 @@ features:
   groups: [W, X_s]              # flight conditions + physical sensors
   stats: [mean, std, min, max]  # per-flight summaries of each signal
   rul_cap: null                 # set a number for a piecewise-linear target
+  history_window: 10            # trailing mean and slope over the last 10 flights; 0 = off
+  history_on: [mean, max]
 models:
   names: [ridge, lgbm]
   params: {}                    # e.g. {lgbm: {num_leaves: 15}}
@@ -53,7 +55,7 @@ evaluation:
   results_dir: results
 uncertainty:
   model: lgbm
-  methods: [split, cv, quantile]
+  methods: [split, cv, quantile, cqr]
   alphas: [0.2, 0.1]            # 80 % and 90 % intervals
   calibration_engines: 2
 tuning:

@@ -27,6 +27,14 @@ removes sensor noise and turns millions of rows into a few hundred per engine.
 
 The file is read one engine at a time, so memory use stays at the size of one engine.
 
+## History features
+
+One flight is noisy: weather, payload and route change every reading. Wear shows as a
+trend. For every per-flight mean and maximum we add the trailing mean and least-squares
+slope over the engine's last ten flights (fewer at the start of its life). Only the
+current and earlier flights of the same engine enter a row; a test checks that changing a
+later flight leaves every earlier row unchanged.
+
 ## What the model may not see
 
 | Column | Why it is excluded |
@@ -78,6 +86,12 @@ to measure coverage directly.
 **Quantile regression.** LightGBM fit to the \(\alpha/2\) and \(1-\alpha/2\) quantiles.
 Widths adapt to each input, but nothing guarantees coverage.
 
+**Conformalized quantile regression** (Romano, Patterson and Candès, 2019). The score of a
+calibration point is how far its true value lies outside the quantile interval,
+\(E = \max(\hat{q}_{lo} - y,\; y - \hat{q}_{hi})\); the conformal quantile \(q\) of
+those scores widens (or narrows) the interval to \([\hat{q}_{lo} - q,\; \hat{q}_{hi} + q]\).
+Scores come from leave-one-engine-out predictions.
+
 !!! note "Exchangeability"
     Test engines 14 and 15 fly a different mix of flights from the training engines. If
     coverage falls short on them, that is evidence of distribution shift, and we report it
@@ -121,6 +135,7 @@ degradation.
   Engine Run-to-Failure Simulation.* PHM 2008.
 - D. Karaboga. *An Idea Based on Honey Bee Swarm for Numerical Optimization.* Technical
   Report TR06, Erciyes University, 2005.
+- Y. Romano, E. Patterson, E. Candès. *Conformalized Quantile Regression.* NeurIPS 2019.
 - V. Vovk, A. Gammerman, G. Shafer. *Algorithmic Learning in a Random World.* Springer, 2005.
 - S. M. Lundberg et al. *From local explanations to global understanding with explainable
   AI for trees.* Nature Machine Intelligence 2:56–67, 2020.

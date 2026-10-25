@@ -33,10 +33,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from itertools import product
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+from tqdm.auto import tqdm
 
 from .evaluation import cross_validate, split_xy
 from .features import feature_columns
@@ -135,21 +137,20 @@ def run_uncertainty(
     dev = table[table["split"] == "dev"].reset_index(drop=True)
     test = table[table["split"] == "test"].reset_index(drop=True)
     scores, frames = [], []
-    for method in methods:
-        for alpha in alphas:
-            for seed in seeds:
-                if method == "split":
-                    iv = split_conformal(dev, test, name, alpha, params, seed, n_calibration)
-                elif method == "cv":
-                    iv = cv_conformal(dev, test, name, alpha, params, seed)
-                elif method == "quantile":
-                    iv = quantile_intervals(dev, test, alpha, params, seed)
-                else:
-                    raise ValueError(f"unknown method {method!r}")
-                iv = iv.assign(method=method, alpha=alpha, target=1 - alpha, seed=seed)
-                frames.append(iv)
-                scores.append({"method": method, "target": 1 - alpha, "seed": seed,
-                               **interval_metrics(iv["RUL"], iv["lo"], iv["hi"])})  # fmt: skip
+    runs = list(product(methods, alphas, seeds))
+    for method, alpha, seed in tqdm(runs, desc="intervals", unit="run"):
+        if method == "split":
+            iv = split_conformal(dev, test, name, alpha, params, seed, n_calibration)
+        elif method == "cv":
+            iv = cv_conformal(dev, test, name, alpha, params, seed)
+        elif method == "quantile":
+            iv = quantile_intervals(dev, test, alpha, params, seed)
+        else:
+            raise ValueError(f"unknown method {method!r}")
+        iv = iv.assign(method=method, alpha=alpha, target=1 - alpha, seed=seed)
+        frames.append(iv)
+        scores.append({"method": method, "target": 1 - alpha, "seed": seed,
+                       **interval_metrics(iv["RUL"], iv["lo"], iv["hi"])})  # fmt: skip
     return pd.DataFrame(scores), pd.concat(frames, ignore_index=True)
 
 

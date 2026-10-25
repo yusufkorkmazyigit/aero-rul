@@ -65,3 +65,12 @@ def test_baselines_learn_the_signal_and_cover_every_seed():
     assert test_ridge["rmse_std"].item() == pytest.approx(0)  # ridge is deterministic
     assert set(preds["model"]) == {"ridge", "lgbm"}
     assert list(per_unit(preds).columns) == [5]
+
+
+def test_nasa_per_cycle_is_comparable_across_sizes():
+    from aerorul.evaluation import all_metrics
+
+    small = all_metrics([50, 50], [60, 60])
+    large = all_metrics([50] * 10, [60] * 10)
+    assert large["nasa"] == pytest.approx(5 * small["nasa"])
+    assert large["nasa_per_cycle"] == pytest.approx(small["nasa_per_cycle"])

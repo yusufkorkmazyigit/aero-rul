@@ -19,10 +19,12 @@ Metrics:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from itertools import product
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import LeaveOneGroupOut
+from tqdm.auto import tqdm
 
 from .features import feature_columns
 from .models import make_model
@@ -50,6 +52,9 @@ def all_metrics(y_true, y_pred) -> dict[str, float]:
         "rmse": rmse(y_true, y_pred),
         "mae": mae(y_true, y_pred),
         "nasa": nasa_score(y_true, y_pred),
+        # The NASA score is a sum, so it grows with the number of cycles scored; the
+        # per-cycle mean is what can be compared across sets of different size.
+        "nasa_per_cycle": nasa_score(y_true, y_pred) / max(len(np.atleast_1d(y_true)), 1),
     }
 
 
@@ -98,21 +103,20 @@ def run_baselines(
     _, y_test, _ = split_xy(test)
 
     scores, preds = [], []
-    for name in names:
-        for seed in seeds:
-            folds, oof = cross_validate(dev, name, params.get(name), seed)
-            scores.append({"model": name, "seed": seed, "stage": "cv",
-                           **all_metrics(dev["RUL"], oof)})  # fmt: skip
-            _, y_hat = fit_and_test(dev, test, name, params.get(name), seed)
-            scores.append({"model": name, "seed": seed, "stage": "test",
-                           **all_metrics(y_test, y_hat)})  # fmt: skip
-            preds.append(test[["unit", "cycle", "RUL"]].assign(model=name, seed=seed, pred=y_hat))
+    for name, seed in tqdm(list(product(names, seeds)), desc="baselines", unit="run"):
+        _, oof = cross_validate(dev, name, params.get(name), seed)
+        scores.append({"model": name, "seed": seed, "stage": "cv",
+                       **all_metrics(dev["RUL"], oof)})  # fmt: skip
+        _, y_hat = fit_and_test(dev, test, name, params.get(name), seed)
+        scores.append({"model": name, "seed": seed, "stage": "test",
+                       **all_metrics(y_test, y_hat)})  # fmt: skip
+        preds.append(test[["unit", "cycle", "RUL"]].assign(model=name, seed=seed, pred=y_hat))
     return pd.DataFrame(scores), pd.concat(preds, ignore_index=True)
 
 
 def summarize(scores: pd.DataFrame) -> pd.DataFrame:
     """Mean and std over seeds, one row per model and stage."""
-    metrics = ["rmse", "mae", "nasa"]
+    metrics = ["rmse", "mae", "nasa", "nasa_per_cycle"]
     agg = scores.groupby(["stage", "model"])[metrics].agg(["mean", "std"])
     agg.columns = [f"{m}_{s}" for m, s in agg.columns]
     return agg.reset_index().sort_values(["stage", "rmse_mean"])

@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from itertools import product
 
 import numpy as np
 import pandas as pd
 from scipy.stats import loguniform, randint, uniform
 from sklearn.model_selection import LeaveOneGroupOut, RandomizedSearchCV, cross_val_score
+from tqdm.auto import tqdm
 
 from .evaluation import rmse, split_xy
 from .features import feature_columns
@@ -145,31 +147,33 @@ def run_benchmark(
     X_test, y_test = test[feature_columns(test)], test["RUL"].to_numpy(float)
 
     results, traces = [], []
-    for opt in optimizers:
-        for seed in seeds:
-            out = search(opt, X, y, groups, budget, seed, space, abc_pop_size)
-            model = make_model("lgbm", out["best_params"], seed).fit(X, y)
-            results.append(
+    runs = list(product(optimizers, seeds))
+    bar = tqdm(runs, desc="benchmark", unit="search")
+    for opt, seed in bar:
+        bar.set_postfix(optimizer=opt, seed=seed)
+        out = search(opt, X, y, groups, budget, seed, space, abc_pop_size)
+        model = make_model("lgbm", out["best_params"], seed).fit(X, y)
+        results.append(
+            {
+                "optimizer": opt,
+                "seed": seed,
+                "cv_rmse": out["cv_rmse"],
+                "test_rmse": rmse(y_test, model.predict(X_test)),
+                "seconds": out["seconds"],
+                "best_params": out["best_params"],
+            }
+        )
+        best_so_far = np.fmin.accumulate(out["trace"])
+        traces.append(
+            pd.DataFrame(
                 {
                     "optimizer": opt,
                     "seed": seed,
-                    "cv_rmse": out["cv_rmse"],
-                    "test_rmse": rmse(y_test, model.predict(X_test)),
-                    "seconds": out["seconds"],
-                    "best_params": out["best_params"],
+                    "evaluation": np.arange(1, len(best_so_far) + 1),
+                    "best_cv_rmse": best_so_far,
                 }
             )
-            best_so_far = np.fmin.accumulate(out["trace"])
-            traces.append(
-                pd.DataFrame(
-                    {
-                        "optimizer": opt,
-                        "seed": seed,
-                        "evaluation": np.arange(1, len(best_so_far) + 1),
-                        "best_cv_rmse": best_so_far,
-                    }
-                )
-            )
+        )
     return pd.DataFrame(results), pd.concat(traces, ignore_index=True)
 
 

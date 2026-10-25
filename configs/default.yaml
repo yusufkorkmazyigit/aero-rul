@@ -1,0 +1,11 @@
+# Default experiment. Paths are relative to the repository root.
+seed: 42
+
+data:
+  raw_path: data/raw/N-CMAPSS_DS02-006.h5
+  processed_dir: data/processed
+
+features:
+  groups: [W, X_s]          # flight conditions + physical sensors
+  stats: [mean, std, min, max]
+  rul_cap: null             # raw RUL; set a number for a piecewise-linear target

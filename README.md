@@ -1,5 +1,7 @@
 # aero-rul
 
+[![CI](https://github.com/yusufkorkmazyigit/aero-rul/actions/workflows/ci.yml/badge.svg)](https://github.com/yusufkorkmazyigit/aero-rul/actions/workflows/ci.yml)
+
 Remaining useful life (RUL) prediction for turbofan engines on NASA's
 [N-CMAPSS](https://www.mdpi.com/2306-5729/6/1/5) dataset, with calibrated uncertainty intervals.
 

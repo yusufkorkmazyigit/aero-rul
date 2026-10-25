@@ -24,6 +24,37 @@ def test_prepare_writes_parquet(config_file):
     assert "dev:" in result.output
 
 
+def test_train_and_evaluate_end_to_end(config_file):
+    assert runner.invoke(app, ["prepare", "-c", config_file]).exit_code == 0
+    trained = runner.invoke(app, ["train", "-c", config_file])
+    assert trained.exit_code == 0, trained.output
+    evaluated = runner.invoke(app, ["evaluate", "-c", config_file])
+    assert evaluated.exit_code == 0, evaluated.output
+    results = Path(load_config(config_file).evaluation.results_dir)
+    assert (results / "models" / "lgbm.joblib").exists()
+    assert (results / "baselines.md").exists()
+    assert "rmse_mean" in evaluated.output
+    intervals = runner.invoke(app, ["uncertainty", "-c", config_file])
+    assert intervals.exit_code == 0, intervals.output
+    assert (results / "intervals.md").exists()
+    assert (results / "bands_split_90.png").exists()
+    assert "coverage_mean" in intervals.output
+    bench = runner.invoke(app, ["benchmark", "-c", config_file])
+    assert bench.exit_code == 0, bench.output
+    assert (results / "convergence.png").exists()
+    explained = runner.invoke(app, ["explain", "-c", config_file])
+    assert explained.exit_code == 0, explained.output
+    assert (results / "shap_signals.png").exists()
+
+
+def test_evaluate_without_prepare_explains_what_to_do(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(f"data:\n  processed_dir: {tmp_path / 'none'}\n", encoding="utf-8")
+    result = runner.invoke(app, ["evaluate", "-c", str(cfg)])
+    assert result.exit_code != 0
+    assert "aerorul prepare" in result.output
+
+
 def test_inspect_lists_arrays(config_file):
     result = runner.invoke(app, ["inspect", "-c", config_file])
     assert result.exit_code == 0

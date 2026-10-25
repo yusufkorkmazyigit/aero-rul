@@ -9,3 +9,22 @@ features:
   groups: [W, X_s]          # flight conditions + physical sensors
   stats: [mean, std, min, max]
   rul_cap: null             # raw RUL; set a number for a piecewise-linear target
+
+models:
+  names: [ridge, lgbm]
+  params: {}                # e.g. {lgbm: {num_leaves: 15}}; defaults in aerorul/models.py
+
+evaluation:
+  seeds: [0, 1, 2, 3, 4]    # every reported number is mean +- std over these
+  results_dir: results
+
+uncertainty:
+  model: lgbm
+  methods: [split, cv, quantile]
+  alphas: [0.2, 0.1]        # 80 % and 90 % intervals
+  calibration_engines: 2    # dev engines held out by the split method
+
+tuning:
+  optimizers: [abc, random, tpe]
+  budget: 60                # candidate evaluations per search, same for every optimizer
+  abc_pop_size: 10

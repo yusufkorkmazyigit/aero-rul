@@ -35,10 +35,52 @@ class FeatureConfig(_Strict):
     rul_cap: float | None = None
 
 
+ModelName = Literal["ridge", "lgbm"]
+
+
+class ModelConfig(_Strict):
+    names: list[ModelName] = Field(default_factory=lambda: ["ridge", "lgbm"])
+    # Per-model overrides of the defaults in aerorul.models.DEFAULTS.
+    params: dict[ModelName, dict] = Field(default_factory=dict)
+
+
+class EvalConfig(_Strict):
+    # Every number we report is a mean +- std over these seeds.
+    seeds: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    results_dir: Path = Path("results")
+
+
+Method = Literal["split", "cv", "quantile"]
+
+
+class UncertaintyConfig(_Strict):
+    model: ModelName = "lgbm"
+    methods: list[Method] = Field(default_factory=lambda: ["split", "cv", "quantile"])
+    # Miscoverage levels: 0.1 -> a 90 % interval.
+    alphas: list[float] = Field(default_factory=lambda: [0.2, 0.1])
+    # Dev engines set aside for calibration by the split method.
+    calibration_engines: int = Field(2, ge=1)
+
+
+Optimizer = Literal["abc", "random", "tpe"]
+
+
+class TuningConfig(_Strict):
+    optimizers: list[Optimizer] = Field(default_factory=lambda: ["abc", "random", "tpe"])
+    # Candidate evaluations per search; the same for every optimizer.
+    budget: int = Field(60, ge=2)
+    # ABC food sources (abcopt pop_size).
+    abc_pop_size: int = Field(10, ge=2)
+
+
 class Config(_Strict):
     seed: int = 42
     data: DataConfig = Field(default_factory=DataConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
+    models: ModelConfig = Field(default_factory=ModelConfig)
+    evaluation: EvalConfig = Field(default_factory=EvalConfig)
+    uncertainty: UncertaintyConfig = Field(default_factory=UncertaintyConfig)
+    tuning: TuningConfig = Field(default_factory=TuningConfig)
 
 
 def load_config(path: str | Path) -> Config:

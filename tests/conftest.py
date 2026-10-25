@@ -54,7 +54,11 @@ def config_file(tmp_path, fake_h5) -> str:
     path.write_text(
         f"seed: 0\n"
         f"data:\n  raw_path: {fake_h5}\n  processed_dir: {tmp_path / 'processed'}\n"
-        f"features:\n  groups: [W, X_s]\n  stats: [mean, std]\n",
+        f"features:\n  groups: [W, X_s]\n  stats: [mean, std]\n"
+        f"models:\n  names: [ridge, lgbm]\n  params: {{lgbm: {{n_estimators: 20}}}}\n"
+        f"evaluation:\n  seeds: [0]\n  results_dir: {tmp_path / 'results'}\n"
+        f"uncertainty:\n  calibration_engines: 1\n"
+        f"tuning:\n  optimizers: [abc, random, tpe]\n  budget: 3\n  abc_pop_size: 2\n",
         encoding="utf-8",
     )
     return str(path)

@@ -83,3 +83,43 @@ def test_cqr_reaches_target_and_stays_ordered():
     assert interval_metrics(iv["RUL"], iv["lo"], iv["hi"])["coverage"] == pytest.approx(
         0.9, abs=0.08
     )
+
+
+def _hetero_table(n_dev=6, n_test=3, n_cycles=80, seed=0) -> pd.DataFrame:
+    """Noise grows with RUL, like real engines: easy near failure, hard early on."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for unit in range(1, n_dev + n_test + 1):
+        split = "dev" if unit <= n_dev else "test"
+        for cycle in range(1, n_cycles + 1):
+            rul = float(n_cycles - cycle)
+            rows.append({"split": split, "unit": unit, "cycle": cycle, "Fc": 1,
+                         "s_mean": rul + rng.normal(scale=1 + 0.15 * rul), "RUL": rul})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+@pytest.mark.parametrize("method", ["norm_pred", "norm_feat"])
+def test_normalized_conformal_reaches_target(method):
+    scores, iv = run_uncertainty(_hetero_table(), "ridge", [method], alphas=[0.1], seeds=[0, 1])
+    assert summarize_intervals(scores)["coverage_mean"].iloc[0] == pytest.approx(0.9, abs=0.07)
+    assert (iv["lo"] <= iv["pred"]).all() and (iv["pred"] <= iv["hi"]).all()
+
+
+def test_normalized_intervals_adapt_where_constant_ones_cannot():
+    scores, iv = run_uncertainty(_hetero_table(), "ridge", ["cv", "norm_pred"], alphas=[0.1],
+                                 seeds=[0])  # fmt: skip
+    width = scores.set_index("method")["width"]
+    assert width["norm_pred"] < width["cv"]
+    # Near failure the adaptive interval is much tighter than early in life.
+    norm = iv[iv["method"] == "norm_pred"]
+    late, early = norm[norm["RUL"] < 15], norm[norm["RUL"] > 60]
+    assert (late["hi"] - late["lo"]).mean() < 0.5 * (early["hi"] - early["lo"]).mean()
+
+
+def test_unknown_difficulty_is_rejected():
+    from aerorul.uncertainty import normalized_conformal
+
+    t = _table()
+    with pytest.raises(ValueError, match="difficulty"):
+        normalized_conformal(t[t["split"] == "dev"], t[t["split"] == "test"], "ridge", 0.1,
+                             difficulty="magic")  # fmt: skip

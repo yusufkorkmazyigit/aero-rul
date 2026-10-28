@@ -31,6 +31,16 @@ Four methods:
     to each input, and coverage regains the conformal guarantee. Scores come from
     leave-one-engine-out predictions, as in ``cv``.
 
+``norm_pred`` and ``norm_feat`` (normalised conformal, Lei et al., 2018)
+    Like ``cv``, but each error is divided by a difficulty estimate sigma(x) before the
+    conformal quantile is taken; the interval is prediction +- q * sigma(x). Where the
+    model is usually accurate (near end of life) the interval narrows, where it is not
+    it widens, and the coverage guarantee is the same as for ``cv``. ``norm_pred`` models
+    sigma as a straight line in the predicted RUL (two parameters, robust with six
+    engines); ``norm_feat`` fits a small LightGBM on the features (flexible, can
+    overfit). Sigma for the calibration scores is itself fitted leave-one-engine-out,
+    so no engine's score uses a sigma that saw that engine.
+
 Exchangeability is the assumption to watch. N-CMAPSS test engines 14 and 15 fly a
 different mix of flights than the training engines; if coverage drops there, that is a
 finding about distribution shift, not a bug.
@@ -45,6 +55,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import LeaveOneGroupOut
 from tqdm.auto import tqdm
 
@@ -154,6 +165,79 @@ def cqr_intervals(
     return _interval_frame(test, mid, lo, hi)
 
 
+DIFFICULTY_KINDS = ("pred", "feat")
+
+
+def _fit_difficulty(kind: str, X: pd.DataFrame, pred: np.ndarray, abs_err: np.ndarray,
+                    seed: int = 0):  # fmt: skip
+    """Fit sigma(x), the expected absolute error; return a function (X, pred) -> sigma.
+
+    Sigma is floored at a tenth of the mean training error, so that no cycle gets a
+    near-zero sigma and with it a near-zero interval and an exploding score.
+    """
+    floor = max(0.1 * float(np.mean(abs_err)), 1e-6)
+    if kind == "pred":
+        line = LinearRegression().fit(pred.reshape(-1, 1), abs_err)
+
+        def sigma(X_new, pred_new):
+            return np.maximum(line.predict(np.asarray(pred_new, float).reshape(-1, 1)), floor)
+
+    elif kind == "feat":
+        # Deliberately small: few hundred flights, and the target is noisy.
+        tree = LGBMRegressor(n_estimators=100, learning_rate=0.05, num_leaves=7,
+                             min_child_samples=40, subsample=0.8, subsample_freq=1,
+                             colsample_bytree=0.8, random_state=seed, verbose=-1)  # fmt: skip
+        tree.fit(X, abs_err)
+
+        def sigma(X_new, pred_new):
+            return np.maximum(tree.predict(X_new), floor)
+
+    else:
+        raise ValueError(f"unknown difficulty {kind!r}; choose from {DIFFICULTY_KINDS}")
+    return sigma
+
+
+def normalized_conformal(
+    dev: pd.DataFrame,
+    test: pd.DataFrame,
+    name: str,
+    alpha: float,
+    params: dict | None = None,
+    seed: int = 0,
+    difficulty: str = "pred",
+) -> pd.DataFrame:
+    """Cross-conformal with errors scaled by a difficulty estimate sigma(x)."""
+    X, y, _ = split_xy(dev)
+    _, oof = cross_validate(dev, name, params, seed)
+    X_test = test[feature_columns(test)]
+    pred = make_model(name, params, seed).fit(X, y).predict(X_test)
+    radius = normalized_radius(dev, oof, X_test, pred, alpha, difficulty, seed)
+    return _interval_frame(test, pred, pred - radius, pred + radius)
+
+
+def normalized_radius(
+    dev: pd.DataFrame,
+    oof: np.ndarray,
+    X_test: pd.DataFrame,
+    pred: np.ndarray,
+    alpha: float,
+    difficulty: str = "pred",
+    seed: int = 0,
+) -> np.ndarray:
+    """Half-width q * sigma(x) for each test row, from out-of-fold dev predictions."""
+    X, y, units = split_xy(dev)
+    abs_err = np.abs(y - oof)
+    # Sigma for each dev engine comes from a difficulty model that never saw that engine.
+    sigma_oof = np.empty(len(y))
+    for train_idx, val_idx in LeaveOneGroupOut().split(X, y, units):
+        sigma = _fit_difficulty(difficulty, X.iloc[train_idx], oof[train_idx],
+                                abs_err[train_idx], seed)  # fmt: skip
+        sigma_oof[val_idx] = sigma(X.iloc[val_idx], oof[val_idx])
+    q = conformal_quantile(abs_err / sigma_oof, alpha)
+    sigma = _fit_difficulty(difficulty, X, oof, abs_err, seed)
+    return q * sigma(X_test, pred)
+
+
 def interval_metrics(y, lo, hi) -> dict[str, float]:
     y, lo, hi = (np.asarray(a, float) for a in (y, lo, hi))
     return {"coverage": float(np.mean((y >= lo) & (y <= hi))), "width": float(np.mean(hi - lo))}
@@ -182,6 +266,8 @@ def run_uncertainty(
             iv = quantile_intervals(dev, test, alpha, params, seed)
         elif method == "cqr":
             iv = cqr_intervals(dev, test, alpha, params, seed)
+        elif method.startswith("norm_"):
+            iv = normalized_conformal(dev, test, name, alpha, params, seed, method[5:])
         else:
             raise ValueError(f"unknown method {method!r}")
         iv = iv.assign(method=method, alpha=alpha, target=1 - alpha, seed=seed)

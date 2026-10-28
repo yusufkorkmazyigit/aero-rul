@@ -39,6 +39,11 @@ def test_train_and_evaluate_end_to_end(config_file):
     assert (results / "intervals.md").exists()
     assert (results / "bands_split_90.png").exists()
     assert "coverage_mean" in intervals.output
+    decided = runner.invoke(app, ["decide", "-c", config_file])
+    assert decided.exit_code == 0, decided.output
+    assert (results / "decisions.md").exists()
+    assert (results / "decision_frontier.png").exists()
+    assert "failure_rate" in decided.output
     bench = runner.invoke(app, ["benchmark", "-c", config_file])
     assert bench.exit_code == 0, bench.output
     assert (results / "convergence.png").exists()

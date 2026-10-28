@@ -58,6 +58,91 @@ Coverage per test engine at the 90 % target:
     engine. Engine 14, which also has the largest point error, falls short of 90 %. Pooled
     coverage alone would hide it.
 
+### Adaptive (normalised) intervals
+
+`aerorul uncertainty` with `methods: [cv, norm_pred, norm_feat]`
+
+![Normalised conformal interval, sigma linear in the prediction](assets/bands_norm_pred_90.png)
+
+| Target | Method | Coverage | Width (flights) |
+| ---: | --- | ---: | ---: |
+| 90 % | **Cross-conformal** | **90.4 % ± 1.5** | **34.1** |
+| 90 % | Normalised, sigma(prediction) | 90.1 % ± 2.2 | 33.2 |
+| 90 % | Normalised, sigma(features) | 99.8 % ± 0.3 | 56.9 |
+| 80 % | **Cross-conformal** | **78.6 % ± 2.1** | **25.0** |
+| 80 % | Normalised, sigma(prediction) | 79.1 % ± 2.6 | 24.9 |
+| 80 % | Normalised, sigma(features) | 96.8 % ± 2.1 | 40.7 |
+
+By phase of life, 90 % target, pooled over engines and seeds (width / coverage):
+
+| Method | RUL <= 20 | 20 < RUL <= 50 | RUL > 50 |
+| --- | ---: | ---: | ---: |
+| Cross-conformal | 30.8 / 81.9 % | 35.6 / 94.9 % | 35.6 / 93.1 % |
+| Normalised, sigma(prediction) | 21.9 / 74.0 % | 35.9 / 97.8 % | 42.8 / 96.7 % |
+| Normalised, sigma(features) | 40.4 / 99.4 % | 62.3 / 100 % | 68.1 / 100 % |
+
+Coverage per test engine at 90 %:
+
+| Method | Engine 11 | Engine 14 | Engine 15 |
+| --- | ---: | ---: | ---: |
+| Cross-conformal | 96.6 % | 80.3 % | 96.4 % |
+| Normalised, sigma(prediction) | 98.3 % | 77.9 % | 96.7 % |
+| Normalised, sigma(features) | 99.3 % | 100 % | 100 % |
+
+The cross-conformal interval is narrower below 20 flights only because its lower edge is
+clipped at zero. The normalised interval moves width from the end of life to the start:
+the marginal guarantee still holds, but coverage drops in the phase a planner cares about
+most. Conformal guarantees are marginal; they say nothing about coverage within a phase
+of life, so it has to be measured. The default remains cross-conformal.
+
+## Maintenance decisions
+
+`aerorul decide`
+
+Book a removal `lead` flights ahead once the policy's statistic is at most `lead`.
+Failure: less than `lead` flights left at booking. Waste: life left at removal.
+Leave-one-engine-out over all nine DS02 engines, five seeds (45 decisions; seeds change
+the model, not the engines, so this is nine engines' worth of evidence).
+
+![Wasted life against failure rate](assets/decision_frontier.png)
+
+Lead time 10 flights, failure rate / wasted flights per engine / mean cost per engine:
+
+| Policy | Failing | Waste | Cost, ratio 20 | 50 | 100 | 200 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Point estimate | 37.8 % | 1.7 | 9.3 | 20.6 | 39.5 | 77.3 |
+| Point - tuned margin | 11.1 to 26.7 % | 3.8 to 9.6 | 9.1 | 18.6 | 20.7 | 31.8 |
+| Quantile regression | 26.7 % | 1.3 | **6.6** | 14.6 | 28.0 | 54.6 |
+| Cross-conformal | 0 % | 17.9 | 17.9 | 17.9 | 17.9 | 17.9 |
+| CQR | 0 % | 10.7 | 10.7 | 10.7 | 10.7 | 10.7 |
+| Normalised conformal | 0 % | 10.5 | 10.5 | **10.5** | **10.5** | **10.5** |
+
+The tuned margin depends on the ratio (mean 3.4, 7.8, 10.5, 10.5 flights); its failure rate
+and waste change with it. Interval policies do not depend on the ratio.
+
+Only when a failure costs as little as 20 flights of waste does accepting failures pay
+(quantile regression). For any ratio a real operator would use, the calibrated lower
+edges win.
+
+Effect of the lead time (failure rate / waste; the tuned margin is left out because it
+would have to be re-tuned for each lead time):
+
+| Policy | Lead 5 | Lead 10 | Lead 15 | Lead 20 |
+| --- | ---: | ---: | ---: | ---: |
+| Point estimate | 51.1 % / 1.2 | 37.8 % / 1.7 | 48.9 % / 1.1 | 55.6 % / 1.7 |
+| Quantile regression | 26.7 % / 1.6 | 26.7 % / 1.3 | 42.2 % / 5.0 | 20.0 % / 12.8 |
+| Cross-conformal | 0 % / 16.4 | 0 % / 17.9 | 0 % / 16.5 | 0 % / 15.5 |
+| CQR | 0 % / 7.3 | 0 % / 10.7 | 0 % / 28.0 | 0 % / 39.4 |
+| Normalised conformal | 8.9 % / 9.1 | 0 % / 10.5 | 0 % / 13.3 | 0 % / 14.3 |
+
+- Cross-conformal is the only policy with no failure at any lead time; its price is a
+  steady 16 to 18 flights of waste.
+- Normalised conformal is the cheapest safe policy from 10 flights of lead time upward.
+  At 5 flights it fails engines: the decision then falls in the last flights of life,
+  where its interval was shown to be too narrow.
+- CQR is excellent at short lead times and wasteful at long ones: its lower quantile is
+  conservative early in life.
+
 ## What the model looks at
 
 `aerorul explain`

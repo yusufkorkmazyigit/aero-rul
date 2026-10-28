@@ -70,7 +70,7 @@ Ten cycles late costs about 1.72; ten cycles early about 1.16. Lower is better.
 ## Prediction intervals
 
 A planner needs a range and a statement of how often such ranges are right. We build
-intervals three ways and **measure coverage on the test engines**.
+intervals several ways and **measure coverage on the test engines**.
 
 **Split conformal.** Hold out two development engines for calibration and train on the
 other four. With absolute calibration errors \(r_1, \dots, r_n\), the radius is the
@@ -92,10 +92,39 @@ calibration point is how far its true value lies outside the quantile interval,
 those scores widens (or narrows) the interval to \([\hat{q}_{lo} - q,\; \hat{q}_{hi} + q]\).
 Scores come from leave-one-engine-out predictions.
 
+**Normalised conformal** (Lei et al., 2018). Divide each leave-one-engine-out error by a
+difficulty estimate \(\hat{\sigma}(x)\), take the conformal quantile \(q\) of
+\(|y - \hat{y}| / \hat{\sigma}(x)\), and return \(\hat{y} \pm q\,\hat{\sigma}(x)\).
+The guarantee is the same as for cross-conformal, but widths follow the estimated
+difficulty. Two choices of \(\hat{\sigma}\): a straight line in the predicted RUL
+(`norm_pred`, two parameters) and a small LightGBM on the features (`norm_feat`). The
+difficulty model for each development engine's score is itself fitted without that
+engine, and \(\hat{\sigma}\) is floored at a tenth of the mean error so that no
+point gets a near-zero interval.
+
 !!! note "Exchangeability"
     Test engines 14 and 15 fly a different mix of flights from the training engines. If
     coverage falls short on them, that is evidence of distribution shift, and we report it
     as a finding rather than tune it away.
+
+## Maintenance decisions
+
+An interval is only useful if it improves a decision. The decision modelled here: after
+every flight, book the engine into the shop \(L\) flights ahead (lead time, default 10)
+as soon as a statistic \(s_t\) of the prediction satisfies \(s_t \le L\). With true
+remaining life \(r_t\) at the booking flight, the engine **fails** if \(r_t < L\) and
+otherwise **wastes** \(r_t - L\) flights. If nothing triggers, it fails. Cost per engine:
+waste \(+\,R \times\) failure, with \(R\) the number of wasted flights one unplanned
+failure is worth, swept from 20 to 200.
+
+Policies differ only in \(s_t\): the point estimate; the point estimate minus a margin
+tuned on out-of-fold predictions of the training engines for each \(R\); and the lower edge
+of each 90 % interval. Cross-conformal's lower edge is \(\hat{y} - q\), itself a constant
+margin, chosen by a coverage target instead of a cost.
+
+Three test engines would give three decisions. The study therefore holds out every engine
+of DS02 in turn and builds the models, intervals and margins from the remaining eight,
+with an inner leave-one-engine-out wherever calibration needs it.
 
 ## Hyperparameter search benchmark
 
@@ -124,8 +153,8 @@ degradation.
 
 - Three test engines are few; results are reported per engine as well as pooled.
 - N-CMAPSS is a high-fidelity simulation, not fleet data.
-- Interval width is constant for the conformal methods; adaptive (normalised) conformal
-  scores are a natural next step.
+- Normalised conformal intervals adapt their width but, on DS02, lose coverage near end of
+  life; the default interval therefore has constant width.
 
 ## References
 
@@ -135,6 +164,8 @@ degradation.
   Engine Run-to-Failure Simulation.* PHM 2008.
 - D. Karaboga. *An Idea Based on Honey Bee Swarm for Numerical Optimization.* Technical
   Report TR06, Erciyes University, 2005.
+- J. Lei, M. G'Sell, A. Rinaldo, R. J. Tibshirani, L. Wasserman. *Distribution-Free
+  Predictive Inference for Regression.* JASA 113(523):1094-1111, 2018.
 - Y. Romano, E. Patterson, E. Candès. *Conformalized Quantile Regression.* NeurIPS 2019.
 - V. Vovk, A. Gammerman, G. Shafer. *Algorithmic Learning in a Random World.* Springer, 2005.
 - S. M. Lundberg et al. *From local explanations to global understanding with explainable

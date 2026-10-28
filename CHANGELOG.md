@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0] - 2026-10-28
+
+### Added
+- Normalised conformal intervals (`norm_pred`, `norm_feat`): leave-one-engine-out errors
+  scaled by a difficulty estimate, itself fitted without the scored engine.
+- Results by phase of life: on DS02 the adaptive interval is narrower near failure but
+  covers less there, so cross-conformal stays the default.
+- `aerorul decide`: maintenance decision study. Each policy books a shop visit a lead
+  time ahead from the point estimate, a tuned margin or an interval's lower edge;
+  failures, wasted life and cost are measured with every engine held out in turn.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

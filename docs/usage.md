@@ -27,6 +27,7 @@ units 11, 14 and 15 for testing.
 aerorul prepare        # 1 Hz recordings -> one row per flight cycle
 aerorul evaluate       # baselines, leave-one-engine-out CV + test score
 aerorul uncertainty    # prediction intervals and coverage
+aerorul decide         # maintenance policies: failures and wasted life
 aerorul explain        # SHAP importance per signal
 aerorul benchmark      # ABC vs random search vs TPE (slowest step)
 ```
@@ -55,7 +56,7 @@ evaluation:
   results_dir: results
 uncertainty:
   model: lgbm
-  methods: [split, cv, quantile, cqr]
+  methods: [split, cv, quantile, cqr, norm_pred, norm_feat]
   alphas: [0.2, 0.1]            # 80 % and 90 % intervals
   calibration_engines: 2
 tuning:

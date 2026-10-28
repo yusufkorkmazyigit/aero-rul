@@ -9,11 +9,17 @@
 aero-rul predicts the remaining useful life (RUL) of turbofan engines on NASA's
 [N-CMAPSS](https://www.mdpi.com/2306-5729/6/1/5) dataset and attaches a prediction interval
 to every estimate. The interval's coverage is not assumed: it is **measured on engines the
-model has never seen**.
+model has never seen**. Then the question a planner actually asks is answered: when should
+this engine go to the shop, and how many failures and wasted flights does that rule cost?
 
 > **Result (DS02, three held-out engines, five seeds).** A 90 % conformal interval contains
 > the true RUL in **90.4 %** of test flights. Plain quantile regression, asked for the same
 > 90 %, delivers **82.2 %** with wider intervals. Point error: **10.1 flights RMSE**.
+>
+> **Decision (all nine engines held out in turn).** Booking a shop visit 10 flights ahead
+> on the lower edge of a normalised conformal interval removed every engine before failure,
+> wasting 10.5 flights of life per engine. Booking on the point estimate let 38 % of
+> engines fail.
 
 ![Predicted RUL and 90 % conformal interval for the three test engines](https://raw.githubusercontent.com/yusufkorkmazyigit/aero-rul/main/docs/assets/bands_cv_90.png)
 
@@ -79,6 +85,71 @@ model (alpha = 1), while the tree ensemble absorbs them.
   Its calibration scores come from held-out training engines, which are harder than the
   test engines; with six engines that gap dominates.
 
+### Adaptive intervals: tried, measured, not shipped
+
+A conformal interval of constant width is too wide near failure and too narrow early in
+life. Normalised conformal prediction (Lei et al., 2018) divides each calibration error by
+a difficulty estimate sigma(x) and returns prediction +- q * sigma(x). Two versions were
+tested, both with sigma fitted leave-one-engine-out so that no score uses a sigma that saw
+its engine.
+
+| 90 % target | Coverage | Width | Width / coverage at RUL <= 20 | at RUL > 50 | Engine 14 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **Cross-conformal** (constant) | **90.4 %** | **34.1** | **30.8 / 81.9 %** | 35.6 / 93.1 % | 80.3 % |
+| Normalised, sigma linear in prediction | 90.1 % | 33.2 | 21.9 / 74.0 % | 42.8 / 96.7 % | 77.9 % |
+| Normalised, sigma from features (LightGBM) | 99.8 % | 56.9 | 40.4 / 99.4 % | 68.1 / 100 % | 100 % |
+
+- **The linear version does what it promises on average:** target coverage, slightly
+  narrower intervals, about 22 flights wide near failure instead of 31.
+- **It pays for that where it matters most.** Below 20 flights of remaining life,
+  coverage falls from 82 % to 74 %. That is where the maintenance decision is taken.
+- **It does not fix engine 14.** Engine 14's shortfall is distribution shift, not a badly
+  shaped interval.
+- **The feature-based version over-covers**, like CQR: a difficulty model learned on five
+  engines misjudges the sixth, calibration scores inflate, intervals grow by two thirds.
+- **So the default interval stays cross-conformal.** Both variants remain available
+  (`norm_pred`, `norm_feat`). Coverage is not the whole story, though: the next section
+  asks which interval leads to the best maintenance decision, and the answer differs.
+
+### From interval to maintenance decision
+
+A planner books a shop visit some flights ahead. The rule tested here: after every
+flight, book a removal 10 flights ahead as soon as a statistic of the prediction is at
+most 10. If the engine had less than 10 flights left at booking, it **fails** before its
+slot; otherwise the life left at removal is **wasted**. Cost per engine = waste + 100 x
+failure, i.e. one unplanned failure is worth 100 flights of thrown-away life.
+
+Every engine of DS02 (nine) is held out in turn; models, intervals and the tuned margin
+come from the other eight only. Five seeds.
+
+| Policy (book when ... <= 10) | Engines failing | Wasted flights per engine | Cost per engine |
+| --- | ---: | ---: | ---: |
+| Point estimate | 37.8 % | 1.7 | 39.5 |
+| Point estimate - tuned margin (about 10) | 11.1 % | 9.6 | 20.7 |
+| Lower edge, quantile regression | 26.7 % | 1.3 | 28.0 |
+| Lower edge, cross-conformal | **0 %** | 17.9 | 17.9 |
+| Lower edge, CQR | **0 %** | 10.7 | 10.7 |
+| **Lower edge, normalised conformal** | **0 %** | **10.5** | **10.5** |
+
+![Wasted life against failure rate for each policy](https://raw.githubusercontent.com/yusufkorkmazyigit/aero-rul/main/docs/assets/decision_frontier.png)
+
+- **A point estimate is not a plan.** Booked on the raw prediction, more than a third of
+  the engines fail before their slot: half the errors are optimistic, and an optimistic
+  error is a failure.
+- **Tuning a safety margin is not enough either.** A margin chosen to minimise cost on
+  the training engines still loses engine 14 under every seed. The margin is fitted to
+  engines that behave alike; engine 14 does not.
+- **Calibrated lower edges lose no engine.** The normalised interval and CQR do it for
+  about the waste of the best margin in hindsight (grey curve). Cross-conformal is just
+  as safe but its constant margin is wider than needed: 7 extra flights per engine.
+- **Coverage and decisions disagree.** The normalised interval lost two-sided coverage
+  in the last 20 flights, but the decision is taken around 20 flights before failure and
+  depends on the lower edge only. With a 5-flight lead time it does fail engines (8.9 %);
+  cross-conformal never does. Which interval to use depends on the lead time.
+- **Read with care.** Nine engines give nine decisions per seed; "0 %" means none of nine
+  failed, not that the risk is zero. The cost ratio and lead time are swept in the
+  [results](https://yusufkorkmazyigit.github.io/aero-rul/results/).
+
 ### What the model looks at
 
 ![Mean absolute SHAP value per signal on the test engines](https://raw.githubusercontent.com/yusufkorkmazyigit/aero-rul/main/docs/assets/shap_signals.png)
@@ -140,6 +211,7 @@ Repository and place `N-CMAPSS_DS02-006.h5` (2.4 GB) in `data/raw/`. Only this f
 aerorul prepare        # 6.5 M one-second rows -> 648 flights (one row each)
 aerorul evaluate       # baselines, leave-one-engine-out CV and test scores
 aerorul uncertainty    # prediction intervals and their coverage
+aerorul decide         # maintenance policies: failures and wasted life
 aerorul explain        # SHAP importance per signal
 aerorul benchmark      # ABC vs random search vs TPE, about 15 minutes on 16 threads
 ```
@@ -155,8 +227,10 @@ Results go to `results/` as Markdown tables, CSV files and figures. Every comman
    over its last ten flights. Only past flights of the same engine are used.
 3. **Models.** Ridge and LightGBM, evaluated with leave-one-engine-out CV and on the test
    engines.
-4. **Intervals.** Split conformal, cross-conformal, quantile regression and CQR, with
-   coverage checked pooled and per engine.
+4. **Intervals.** Split conformal, cross-conformal, quantile regression, CQR and
+   normalised conformal, with coverage checked pooled, per engine and by phase of life.
+5. **Decisions.** Each interval's lower edge books a shop visit; failures and wasted life
+   are counted with every engine held out in turn.
 
 The [method page](https://yusufkorkmazyigit.github.io/aero-rul/method/) explains each
 choice, with formulas and references.
@@ -165,8 +239,9 @@ choice, with formulas and references.
 
 - Three test engines are few. Results are given per engine as well as pooled.
 - N-CMAPSS is a high-fidelity simulation, not fleet data.
-- Conformal intervals have constant width; normalised conformal scores that narrow the
-  interval near end of life are the natural next step.
+- Conformal intervals have constant width. Normalised conformal scores narrow them near
+  end of life but lose coverage exactly there on DS02 (see above); more engines, or a
+  sigma model conditioned on life phase, are the next things to try.
 
 ## Development
 

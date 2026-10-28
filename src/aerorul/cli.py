@@ -202,5 +202,49 @@ def explain(config: Path = ConfigOpt) -> None:
     typer.echo(report)
 
 
+@app.command()
+def decide(config: Path = ConfigOpt) -> None:
+    """Maintenance policies: when to book a removal, and what each policy costs."""
+    import numpy as np
+
+    from .decision import frontier, plot_frontier, run_decision_study, summarize_decisions
+
+    cfg = load_config(config)
+    dc = cfg.decision
+    table = _load_table(cfg)
+    outcomes, predictions = run_decision_study(
+        table,
+        dc.model,
+        dc.alpha,
+        cfg.evaluation.seeds,
+        dc.lead,
+        dc.cost_ratios,
+        dc.policies,
+        cfg.models.params.get(dc.model),
+        dc.max_margin,
+    )
+    out_dir = Path(cfg.evaluation.results_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    outcomes.to_csv(out_dir / "decision_outcomes.csv", index=False)
+    predictions.to_parquet(out_dir / "decision_predictions.parquet", index=False)
+    summary = summarize_decisions(outcomes)
+    front = frontier(predictions, dc.lead, np.arange(0, dc.max_margin + 1))
+    front.to_csv(out_dir / "decision_frontier.csv", index=False)
+    ratio = sorted(dc.cost_ratios)[len(dc.cost_ratios) // 2]
+    plot_frontier(front, summary, ratio, out_dir / "decision_frontier.png")
+    n_engines = table["unit"].nunique()
+    report = (
+        f"# Maintenance decisions ({dc.model}, lead {dc.lead} flights)\n\n"
+        f"Leave-one-engine-out over all {n_engines} engines x {len(cfg.evaluation.seeds)} "
+        "seeds. A removal is booked `lead` flights ahead once the policy's statistic is <= "
+        "`lead`. Failure: the engine had less than `lead` flights left at booking. Waste: "
+        "flights of life left at removal. Cost per engine = waste + ratio x failure.\n\n"
+        f"{summary.round(3).to_markdown(index=False)}\n\n"
+        "Figure: decision_frontier.png\n"
+    )
+    (out_dir / "decisions.md").write_text(report, encoding="utf-8")
+    typer.echo(report)
+
+
 if __name__ == "__main__":
     app()

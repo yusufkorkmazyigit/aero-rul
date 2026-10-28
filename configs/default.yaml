@@ -22,9 +22,17 @@ evaluation:
 
 uncertainty:
   model: lgbm
-  methods: [split, cv, quantile, cqr]
+  methods: [split, cv, quantile, cqr, norm_pred, norm_feat]
   alphas: [0.2, 0.1]        # 80 % and 90 % intervals
   calibration_engines: 2    # dev engines held out by the split method
+
+decision:
+  model: lgbm
+  policies: [point, point_margin, cv, quantile, cqr, norm_pred]
+  alpha: 0.1                # interval policies use the lower edge of a 90 % interval
+  lead: 10                  # a shop slot is booked 10 flights ahead
+  cost_ratios: [20, 50, 100, 200]   # one failure costs this many flights of wasted life
+  max_margin: 60
 
 tuning:
   optimizers: [abc, random, tpe]

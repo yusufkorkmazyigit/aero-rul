@@ -6,7 +6,7 @@ authors:
     given-names: "Yusuf"
 repository-code: "https://github.com/yusufkorkmazyigit/aero-rul"
 license: MIT
-version: 0.1.0
+version: 0.2.0
 keywords:
   - predictive maintenance
   - remaining useful life

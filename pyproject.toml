@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aerorul"
-version = "0.1.0"
+version = "0.2.0"
 description = "Remaining useful life prediction for turbofan engines on NASA N-CMAPSS, with calibrated uncertainty."
 readme = "README.md"
 license = "MIT"
